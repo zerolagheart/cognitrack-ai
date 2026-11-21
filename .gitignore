@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secrets
+.env
+*.pem
+
+# Data: raw/restricted datasets, generated audio and features are never committed (DVC tracks them)
+/data/raw/*
+/data/interim/*
+/data/processed/*
+/data/synthetic/*
+/data/uploads/*
+!/data/**/.gitkeep
+*.db
+*.db-journal
+
+# Models, checkpoints and tracking
+/artifacts/*
+!/artifacts/.gitkeep
+/mlruns/
+*.joblib
+*.safetensors
+*.bin
+*.pt
+*.ckpt
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# DVC
+/dvc_remote/

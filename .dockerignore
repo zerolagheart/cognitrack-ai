@@ -1,0 +1,15 @@
+.venv
+**/__pycache__
+**/*.pyc
+.git
+.github
+frontend
+data
+artifacts
+mlruns
+notebooks
+docs
+tests
+backend/tests
+*.db
+.env

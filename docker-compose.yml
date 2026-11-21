@@ -1,0 +1,71 @@
+# Local deployment: PostgreSQL + FastAPI backend + React dashboard (nginx).
+#   docker compose up --build             → http://localhost:8080
+#   docker compose run --rm pipeline       → run the synthetic end-to-end pipeline and publish into PostgreSQL
+# The pipeline service shares ./data, ./artifacts and ./mlruns with the backend through bind mounts.
+name: cognitrack
+
+x-app-env: &app-env
+  COGNITRACK_ENVIRONMENT: ${COGNITRACK_ENVIRONMENT:-development}
+  COGNITRACK_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-cognitrack}:${POSTGRES_PASSWORD:-change-me-local-only}@db:5432/${POSTGRES_DB:-cognitrack}
+  COGNITRACK_VIEWER_API_KEYS: ${COGNITRACK_VIEWER_API_KEYS:-}
+  COGNITRACK_RESEARCHER_API_KEYS: ${COGNITRACK_RESEARCHER_API_KEYS:-}
+  COGNITRACK_ADMIN_API_KEYS: ${COGNITRACK_ADMIN_API_KEYS:-}
+  COGNITRACK_RETAIN_RAW_AUDIO: ${COGNITRACK_RETAIN_RAW_AUDIO:-false}
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cognitrack}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-local-only}
+      POSTGRES_DB: ${POSTGRES_DB:-cognitrack}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Not published to the host by default; uncomment for local SQL access.
+    # ports: ["5432:5432"]
+
+  backend:
+    build: .
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./artifacts:/app/artifacts
+      - ./mlruns:/app/mlruns
+      - ./docs/reports:/app/docs/reports
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_KEY: ${VITE_API_KEY:-}
+    depends_on:
+      - backend
+    ports:
+      - "8080:8080"
+
+  pipeline:
+    build: .
+    profiles: ["pipeline"]
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./artifacts:/app/artifacts
+      - ./mlruns:/app/mlruns
+      - ./docs/reports:/app/docs/reports
+    command: ["cognitrack", "run-all", "--quick", "--workers", "2"]
+
+volumes:
+  pgdata:

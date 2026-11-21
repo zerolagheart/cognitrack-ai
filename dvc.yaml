@@ -1,0 +1,106 @@
+# DVC pipeline: `dvc repro` re-runs only stages whose code, params or inputs changed.
+# Parameters are read from configs/default.yaml. Restricted datasets stay outside git; DVC tracks hashes only.
+stages:
+  generate_synthetic:
+    cmd: cognitrack generate-synthetic
+    deps:
+      - ml/data/synthetic.py
+    params:
+      - configs/default.yaml:
+          - synthetic
+          - project.seed
+    outs:
+      - data/synthetic
+
+  ingest:
+    cmd: cognitrack ingest
+    deps:
+      - data/synthetic
+      - ml/data
+      - pipelines/ingestion.py
+    params:
+      - configs/default.yaml:
+          - project.datasets
+          - datasets
+    outs:
+      - data/interim/manifest.parquet
+    metrics:
+      - artifacts/reports/data_quality.json:
+          cache: false
+
+  extract_features:
+    cmd: cognitrack extract-features --workers 4
+    deps:
+      - data/interim/manifest.parquet
+      - ml/audio
+      - ml/nlp
+      - ml/preprocessing
+      - ml/features
+    params:
+      - configs/default.yaml:
+          - audio
+          - nlp
+          - transcription
+    outs:
+      - data/processed/features.parquet
+
+  embed:
+    cmd: cognitrack embed
+    deps:
+      - data/interim/manifest.parquet
+      - ml/embeddings
+    params:
+      - configs/default.yaml:
+          - embeddings
+    outs:
+      - data/processed/embeddings.parquet
+      - data/processed/embedding_cache.parquet:
+          persist: true
+
+  build_dataset:
+    cmd: cognitrack build-dataset
+    deps:
+      - data/interim/manifest.parquet
+      - data/processed/features.parquet
+      - data/processed/embeddings.parquet
+      - ml/data/splitting.py
+    params:
+      - configs/default.yaml:
+          - split
+    outs:
+      - data/processed/dataset.parquet
+
+  train:
+    cmd: cognitrack train
+    deps:
+      - data/processed/dataset.parquet
+      - ml/models
+      - ml/fusion
+      - ml/training
+    params:
+      - configs/default.yaml:
+          - training
+    outs:
+      - artifacts/models
+
+  evaluate:
+    cmd: cognitrack evaluate && cognitrack longitudinal && cognitrack monitor
+    deps:
+      - artifacts/models
+      - data/processed/dataset.parquet
+      - ml/evaluation
+      - ml/explainability
+      - ml/longitudinal
+      - ml/monitoring
+    params:
+      - configs/default.yaml:
+          - evaluation
+          - longitudinal
+          - monitoring
+    outs:
+      - data/processed/predictions.parquet
+    metrics:
+      - artifacts/reports/model_comparison.json:
+          cache: false
+      - artifacts/reports/longitudinal.json:
+          cache: false
